@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Star Runner - Action Game</title>
+  <style>
+    * {
+      margin: 0; padding: 0; box-sizing: border-box;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+    body {
+      background: linear-gradient(135deg, #0c0e2a, #1a1f4b, #2c3480);
+      color: white; min-height: 100vh;
+      display: flex; flex-direction: column;
+      align-items: center; padding: 20px;
+      overflow-x: hidden;
+    }
+    header { text-align: center; margin-bottom: 20px; width: 100%; }
+    h1 {
+      font-size: 3rem; margin-bottom: 10px;
+      text-shadow: 0 0 15px #00f3ff, 0 0 25px #00f3ff;
+      background: linear-gradient(to right, #00f3ff, #00a2ff);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      font-weight: 800;
+    }
+    .game-container {
+      position: relative;
+      width: 800px; height: 500px;
+      margin: 0 auto;
+      border: 4px solid #00f3ff;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 0 30px rgba(0, 243, 255, 0.6);
+      background: #05071f;
+    }
+    canvas { background: #05071f; display: block; }
+    .stats {
+      display: flex; justify-content: space-between;
+      width: 800px; margin: 20px auto;
+      background: rgba(5, 7, 31, 0.8);
+      padding: 15px 25px;
+      border-radius: 12px;
+      border: 2px solid #00f3ff;
+      font-size: 1.2rem; font-weight: bold;
+    }
+    .stat span {
+      color: #00f3ff; font-weight: bold;
+      font-size: 1.4rem; margin-left: 6px;
+      text-shadow: 0 0 8px #00f3ff;
+    }
+    .controls { display: flex; gap: 15px; margin-top: 15px; }
+    button {
+      background: linear-gradient(to bottom, #00f3ff, #0084ff);
+      color: #0c0e2a; border: none;
+      padding: 12px 30px; font-size: 1.2rem;
+      border-radius: 40px; cursor: pointer;
+      font-weight: bold;
+      transition: all 0.3s;
+      box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+    }
+    button:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 8px 20px rgba(0,243,255,0.5);
+      background: linear-gradient(to bottom, #00ffff, #0099ff);
+    }
+    @media (max-width: 850px) {
+      .game-container, .stats { width: 95%; }
+      .game-container { height: 400px; }
+      h1 { font-size: 2.2rem; }
+      .stats { flex-direction: column; gap: 12px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>STAR RUNNER</h1>
+    <p>Shoot the enemies and reach the highest score!</p>
+  </header>
+
+  <div class="stats">
+    <div class="stat">Score: <span id="score">0</span></div>
+    <div class="stat">Lives: <span id="lives">3</span></div>
+    <div class="stat">Level: <span id="level">1</span></div>
+    <div class="stat">High Score: <span id="high-score">0</span></div>
+  </div>
+
+  <div class="game-container">
+    <canvas id="gameCanvas" width="800" height="500"></canvas>
+  </div>
+
+  <div class="controls">
+    <button id="startBtn">Start</button>
+    <button id="pauseBtn">Pause</button>
+    <button id="restartBtn">Restart</button>
+  </div>
+
+  <script>
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+
+    const scoreEl = document.getElementById("score");
+    const livesEl = document.getElementById("lives");
+    const levelEl = document.getElementById("level");
+    const highScoreEl = document.getElementById("high-score");
+
+    const startBtn = document.getElementById("startBtn");
+    const pauseBtn = document.getElementById("pauseBtn");
+    const restartBtn = document.getElementById("restartBtn");
+
+    let game = {
+      running: false,
+      score: 0,
+      lives: 3,
+      level: 1,
+      highScore: localStorage.getItem("starRunnerHS") || 0
+    };
+
+    let player, bullets, enemies, stars;
+
+    function initGame() {
+      player = {
+        x: canvas.width / 2 - 25,
+        y: canvas.height - 70,
+        width: 50,
+        height: 60,
+        speed: 6,
+        lastShot: 0,
+        fireRate: 300
+      };
+      bullets = [];
+      enemies = [];
+      stars = [];
+      for (let i = 0; i < 80; i++) {
+        stars.push({
+          x: Math.random() * canvas.width,
+          y: Math.random() * canvas.height,
+          size: Math.random() * 2 + 1,
+          speed: Math.random() * 2 + 1
+        });
+      }
+      scoreEl.textContent = game.score;
+      livesEl.textContent = game.lives;
+      levelEl.textContent = game.level;
+      highScoreEl.textContent = game.highScore;
+    }
+
+    // Mouse control
+    canvas.addEventListener("mousemove", e => {
+      const rect = canvas.getBoundingClientRect();
+      player.x = e.clientX - rect.left - player.width / 2;
+      player.y = e.clientY - rect.top - player.height / 2;
+
+      if (player.x < 0) player.x = 0;
+      if (player.x + player.width > canvas.width) player.x = canvas.width - player.width;
+      if (player.y < 0) player.y = 0;
+      if (player.y + player.height > canvas.height) player.y = canvas.height - player.height;
+    });
+
+    let shooting = false;
+    canvas.addEventListener("mousedown", () => shooting = true);
+    canvas.addEventListener("mouseup", () => shooting = false);
+
+    startBtn.addEventListener("click", startGame);
+    pauseBtn.addEventListener("click", togglePause);
+    restartBtn.addEventListener("click", () => { resetGame(); startGame(); });
+
+    function drawPlayer() {
+      ctx.fillStyle = "#00f3ff";
+      ctx.beginPath();
+      ctx.moveTo(player.x + player.width / 2, player.y);
+      ctx.lineTo(player.x, player.y + player.height);
+      ctx.lineTo(player.x + player.width, player.y + player.height);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    function drawBullets() {
+      ctx.fillStyle = "#00f3ff";
+      for (let i = 0; i < bullets.length; i++) {
+        let b = bullets[i];
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, b.radius, 0, Math.PI * 2);
+        ctx.fill();
+        b.y -= b.speed;
+        if (b.y < 0) bullets.splice(i, 1);
+      }
+    }
+
+    function drawEnemies() {
+      ctx.fillStyle = "#ff3333";
+      for (let i = 0; i < enemies.length; i++) {
+        let e = enemies[i];
+        ctx.beginPath();
+        ctx.moveTo(e.x + e.width / 2, e.y);
+        ctx.lineTo(e.x, e.y + e.height);
+        ctx.lineTo(e.x + e.width, e.y + e.height);
+        ctx.closePath();
+        ctx.fill();
+        e.y += e.speed;
+        if (e.y > canvas.height) enemies.splice(i, 1);
+      }
+    }
+
+    function drawStars() {
+      ctx.fillStyle = "white";
+      for (let i = 0; i < stars.length; i++) {
+        let s = stars[i];
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2);
+        ctx.fill();
+        s.y += s.speed;
+        if (s.y > canvas.height) {
+          s.y = 0;
+          s.x = Math.random() * canvas.width;
+        }
+      }
+    }
+
+    function update() {
+      // Automatic shooting
+      if (shooting && Date.now() - player.lastShot > player.fireRate) {
+        bullets.push({ x: player.x + player.width / 2, y: player.y, radius: 3, speed: 8 });
+        player.lastShot = Date.now();
+      }
+
+      // Spawn enemies
+      if (Math.random() < 0.02) {
+        enemies.push({
+          x: Math.random() * (canvas.width - 40),
+          y: -40,
+          width: 40,
+          height: 40,
+          speed: 2
+        });
+      }
+
+      // bullet vs enemy collision
+      for (let i = bullets.length - 1; i >= 0; i--) {
+        for (let j = enemies.length - 1; j >= 0; j--) {
+          let b = bullets[i];
+          let e = enemies[j];
+          if (b.x > e.x && b.x < e.x + e.width && b.y > e.y && b.y < e.y + e.height) {
+            bullets.splice(i, 1);
+            enemies.splice(j, 1);
+            game.score += 10;
+            scoreEl.textContent = game.score;
+            break;
+          }
+        }
+      }
+
+      // enemy vs player collision
+      for (let i = enemies.length - 1; i >= 0; i--) {
+        let e = enemies[i];
+        if (player.x < e.x + e.width &&
+            player.x + player.width > e.x &&
+            player.y < e.y + e.height &&
+            player.y + player.height > e.y) {
+          enemies.splice(i, 1);
+          game.lives--;
+          livesEl.textContent = game.lives;
+          if (game.lives <= 0) gameOver();
+        }
+      }
+
+      // increase level
+      const newLevel = Math.floor(game.score / 200) + 1;
+      if (newLevel > game.level) {
+        game.level = newLevel;
+        levelEl.textContent = game.level;
+      }
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      drawStars();
+      drawBullets();
+      drawEnemies();
+      drawPlayer();
+    }
+
+    function gameLoop() {
+      if (game.running) {
+        update();
+        draw();
+        requestAnimationFrame(gameLoop);
+      }
+    }
+
+    function startGame() {
+      if (!game.running) {
+        game.running = true;
+        gameLoop();
+      }
+    }
+
+    function togglePause() {
+      game.running = !game.running;
+      if (game.running) gameLoop();
+    }
+
+    function gameOver() {
+      game.running = false;
+      if (game.score > game.highScore) {
+        game.highScore = game.score;
+        localStorage.setItem("starRunnerHS", game.highScore);
+        highScoreEl.textContent = game.highScore;
+      }
+      setTimeout(() => {
+        alert(`Game Over! Your score: ${game.score}`);
+        resetGame();
+      }, 300);
+    }
+
+    function resetGame() {
+      game.score = 0;
+      game.lives = 3;
+      game.level = 1;
+      scoreEl.textContent = game.score;
+      livesEl.textContent = game.lives;
+      levelEl.textContent = game.level;
+      initGame();
+    }
+
+    window.onload = () => {
+      initGame();
+      highScoreEl.textContent = game.highScore;
+    };
+  </script>
+</body>
+</html>
