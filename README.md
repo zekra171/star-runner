@@ -17,6 +17,6 @@ Control your spaceship with the mouse, shoot enemies, and aim for the **highest 
 4. Try to survive as long as possible and get the highest score!
 
 ## 🌐 Live Demo
-
+ https://zekra171.github.io/star-runner/
 
 
